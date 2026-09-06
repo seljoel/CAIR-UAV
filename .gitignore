@@ -1,0 +1,51 @@
+# ==============================================================================
+# CAIR-UAV .gitignore
+# ==============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project outputs
+models/*.zip
+models/*.pkl
+logs/
+results/plots/*.png
+results/plots/*.pdf
+results/*.csv
+results/*.json
+
+# TensorBoard
+tb_logs/
+events.out.tfevents.*
+
+# Misc
+*.log
+.agents/

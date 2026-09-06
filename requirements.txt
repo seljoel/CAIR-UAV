@@ -1,0 +1,45 @@
+# ==============================================================================
+# CAIR-UAV: Context-Adaptive Information-Gain-Driven UAV
+#            for Autonomous Disaster Response
+# ==============================================================================
+# Python 3.10+ required
+# ==============================================================================
+
+# Core RL & Gymnasium
+gymnasium>=0.29.0
+stable-baselines3==2.3.2
+sb3-contrib==2.3.0
+
+# Deep Learning
+torch>=2.0.0
+
+# Scientific Computing
+numpy>=1.26.0
+scipy>=1.11.0
+
+# Visualization & Plotting
+pygame>=2.5.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+plotly>=5.18.0
+
+# Dashboard
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+
+# Logging & Experiment Tracking
+tensorboard>=2.15.0
+tqdm>=4.66.0
+
+# Configuration & Serialization
+pyyaml>=6.0
+jsonschema>=4.20.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Utilities
+pandas>=2.1.0
+tabulate>=0.9.0
+colorama>=0.4.6
