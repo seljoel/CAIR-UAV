@@ -19,7 +19,7 @@ import numpy as np
 from stable_baselines3 import PPO
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import EXPERIMENT, RESULTS_DIR, MODELS_DIR
+from config import EXPERIMENT, RESULTS_DIR, MODELS_DIR, Action
 from environment.disaster_env import DisasterResponseEnv
 from algorithms.random_policy import RandomPolicy
 from algorithms.heuristic import GreedyHeuristicPolicy
@@ -41,7 +41,40 @@ class RLAgentWrapper:
             steps = 0
             while not done:
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = env.step(int(action))
+                final_action = int(action)
+                
+                # 1. Check battery level from telemetry
+                battery_norm = obs["telemetry"][0]
+                
+                # 2. Safety override if battery < 20%
+                if battery_norm < 0.20:
+                    uav_x_norm = float(obs["telemetry"][2])
+                    uav_y_norm = float(obs["telemetry"][3])
+                    
+                    grid_width = env.grid_cfg.width
+                    grid_height = env.grid_cfg.height
+                    
+                    uav_col = int(round(uav_x_norm * (grid_width - 1)))
+                    uav_row = int(round(uav_y_norm * (grid_height - 1)))
+                    uav_col = np.clip(uav_col, 0, grid_width - 1)
+                    uav_row = np.clip(uav_row, 0, grid_height - 1)
+                    
+                    base_row, base_col = env.grid_cfg.base_position
+                    
+                    if uav_row == base_row and uav_col == base_col:
+                        # Already at base, just hover
+                        final_action = Action.HOVER_AND_SCAN
+                    else:
+                        # 3. Force action toward base
+                        dy = base_row - uav_row
+                        dx = base_col - uav_col
+                        
+                        if abs(dy) >= abs(dx):
+                            final_action = Action.MOVE_NORTH if dy < 0 else Action.MOVE_SOUTH
+                        else:
+                            final_action = Action.MOVE_WEST if dx < 0 else Action.MOVE_EAST
+                            
+                obs, reward, terminated, truncated, info = env.step(final_action)
                 total_reward += reward
                 steps += 1
                 done = terminated or truncated

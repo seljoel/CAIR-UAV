@@ -124,7 +124,7 @@ class ObservationConfig:
     """
 
     num_spatial_channels: int = 5
-    telemetry_dim: int = 11  # 6 resource + 5 context features
+    telemetry_dim: int = 13  # 6 resource + 2 return-safety + 5 context features
 
     # Names for reference / logging
     spatial_channel_names: Tuple[str, ...] = (
@@ -141,6 +141,8 @@ class ObservationConfig:
         "current_y",
         "computation_budget",
         "communication_budget",
+        "dist_to_base_norm",
+        "energy_to_return_norm",
         "ctx_exploration",
         "ctx_investigation",
         "ctx_resource_constrained",
@@ -178,8 +180,8 @@ class RewardConfig:
     w_time_penalty: float = 0.1          # Small penalty per time step to encourage speed
 
     # Terminal rewards / penalties
-    w_mission_complete_bonus: float = 20.0   # Bonus if returned to base with survivors found
-    w_stranded_penalty: float = -50.0        # Penalty if battery dies away from base
+    w_mission_complete_bonus: float = 50.0   # Bonus if returned to base with survivors found
+    w_stranded_penalty: float = -100.0       # Penalty if battery dies away from base
     w_out_of_time_penalty: float = -10.0     # Penalty for running out of mission time
 
     # Diminishing returns
@@ -332,15 +334,16 @@ EXPERIMENT = ExperimentConfig()
 class Action:
     """Enumeration of discrete UAV actions.
 
-    These map directly to Gymnasium Discrete(5) action indices.
+    These map directly to Gymnasium Discrete(6) action indices.
     """
     MOVE_NORTH: int = 0   # y - 1 (up in grid)
     MOVE_SOUTH: int = 1   # y + 1 (down in grid)
     MOVE_EAST: int = 2    # x + 1 (right in grid)
     MOVE_WEST: int = 3    # x - 1 (left in grid)
     HOVER_AND_SCAN: int = 4
+    RETURN_TO_BASE: int = 5  # Move one step toward base (computed direction)
 
-    NUM_ACTIONS: int = 5
+    NUM_ACTIONS: int = 6
 
     # Direction vectors (dy, dx) for movement actions
     DIRECTION_DELTAS: Dict[int, Tuple[int, int]] = {
@@ -356,6 +359,7 @@ class Action:
         2: "MOVE_EAST",
         3: "MOVE_WEST",
         4: "HOVER_AND_SCAN",
+        5: "RETURN_TO_BASE",
     }
 
 

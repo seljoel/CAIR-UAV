@@ -16,16 +16,18 @@ Observation Space (gymnasium.spaces.Dict):
         Channel 2: Uncertainty (Shannon entropy of belief)
         Channel 3: Hazard map (as observed / revealed)
         Channel 4: Historical visit count (normalized)
-    telemetry : Box(11,) float32
+    telemetry : Box(13,) float32
         [battery, time, x, y, compute, comm,
+         dist_to_base_norm, energy_to_return_norm,
          ctx_explore, ctx_investigate, ctx_resource, ctx_risk, ctx_emergency]
 
-Action Space (gymnasium.spaces.Discrete(5)):
+Action Space (gymnasium.spaces.Discrete(6)):
     0: MOVE_NORTH
     1: MOVE_SOUTH
     2: MOVE_EAST
     3: MOVE_WEST
     4: HOVER_AND_SCAN
+    5: RETURN_TO_BASE
 
 Author: CAIR-UAV Research Team
 """
@@ -195,6 +197,7 @@ class DisasterResponseEnv(gym.Env):
 
         self._episode_reward: float = 0.0
         self._done: bool = False
+        self._emergency_return_triggered: bool = False
 
     # ==================================================================
     # GYMNASIUM API
@@ -258,12 +261,17 @@ class DisasterResponseEnv(gym.Env):
         self._dynamic_events_count = 0
         self._episode_reward = 0.0
         self._done = False
+        self._emergency_return_triggered = False
 
         # Mark initial position as visited
         self._visit_count[self._uav_pos[0], self._uav_pos[1]] = 1.0
 
         # Reveal hazards near starting position
         self._reveal_nearby_hazards()
+        
+        # Initialize previous distance to base for reward shaping
+        base_y, base_x = self.grid_cfg.base_position
+        self._prev_dist_to_base = abs(self._uav_pos[0] - base_y) + abs(self._uav_pos[1] - base_x)
 
         obs = self._build_observation()
         info = self._build_info()
@@ -316,6 +324,47 @@ class DisasterResponseEnv(gym.Env):
             self._battery -= self.resource_cfg.scan_energy_cost
             self._computation_budget -= self.resource_cfg.scan_computation_cost
             self._communication_budget -= self.resource_cfg.scan_communication_cost
+        elif action == Action.RETURN_TO_BASE:
+            # Compute direction toward base and move one step
+            base_row, base_col = self.grid_cfg.base_position
+            dy = base_row - self._uav_pos[0]
+            dx = base_col - self._uav_pos[1]
+
+            if dy == 0 and dx == 0:
+                # Already at base — treat as idle hover (no movement cost)
+                pass
+            else:
+                # Move one step toward base (prefer axis with larger gap)
+                if abs(dy) >= abs(dx):
+                    step_dy = 1 if dy > 0 else -1
+                    step_dx = 0
+                else:
+                    step_dy = 0
+                    step_dx = 1 if dx > 0 else -1
+
+                new_y = int(np.clip(self._uav_pos[0] + step_dy, 0, self.grid_cfg.height - 1))
+                new_x = int(np.clip(self._uav_pos[1] + step_dx, 0, self.grid_cfg.width - 1))
+
+                self._uav_pos[0] = new_y
+                self._uav_pos[1] = new_x
+
+                energy_cost = self.resource_cfg.move_energy_cost
+                self._battery -= self.resource_cfg.move_energy_cost
+                self._computation_budget -= self.resource_cfg.move_computation_cost
+
+                # Track visit
+                if self._visit_count[new_y, new_x] == 0:
+                    new_cell_bonus = self.reward_cfg.w_new_cell_bonus
+                self._visit_count[new_y, new_x] += 1.0
+
+                # Reveal hazards near new position
+                self._reveal_nearby_hazards()
+
+                # Check hazard at new position
+                hazard_intensity = self._ground_truth_hazard_map[new_y, new_x]
+                if hazard_intensity > 0:
+                    hazard_penalty = self.reward_cfg.w_hazard_penalty * hazard_intensity
+                    self._hazard_encounters += 1
         elif action in Action.DIRECTION_DELTAS:
             dy, dx = Action.DIRECTION_DELTAS[action]
             new_y = int(np.clip(self._uav_pos[0] + dy, 0, self.grid_cfg.height - 1))
@@ -357,8 +406,46 @@ class DisasterResponseEnv(gym.Env):
             - hazard_penalty
             - time_penalty
         )
+        
+        # --- Soft Action Masking via Reward Penalty ---
+        base_row, base_col = self.grid_cfg.base_position
+        current_dist_to_base = abs(self._uav_pos[0] - base_row) + abs(self._uav_pos[1] - base_col)
+
+        move_cost = self.resource_cfg.move_energy_cost
+        idle_cost = self.resource_cfg.hover_idle_energy
+        # Energy needed = (distance * move_cost) + (distance * idle_drain_per_step)
+        energy_needed_to_return = current_dist_to_base * (move_cost + idle_cost)
+        max_batt = self.resource_cfg.max_battery
+        # 10% safety buffer
+        safe_energy_threshold = energy_needed_to_return + (max_batt * 0.10)
+
+        if not hasattr(self, "_prev_dist_to_base"):
+            self._prev_dist_to_base = current_dist_to_base
+
+        if current_dist_to_base > 0:
+            if self._battery <= safe_energy_threshold:
+                # Battery is in the critical zone
+                if action == Action.RETURN_TO_BASE:
+                    reward += 5.0  # Reward for choosing the safe action
+                else:
+                    reward -= 10.0  # Penalty for ignoring critical battery
+
+            # Emergency termination: return is physically impossible
+            if self._battery < energy_needed_to_return:
+                terminated = True
+                self._battery = max(self._battery, 0.0)
+                reward += self.reward_cfg.w_stranded_penalty
+                self._emergency_return_triggered = True
+
+        self._prev_dist_to_base = current_dist_to_base
 
         # --- Check terminal conditions ---
+        # Precompute exploration metrics for mission-completion gating
+        _total_cells = self.grid_cfg.height * self.grid_cfg.width
+        _unique_visited = int(np.count_nonzero(self._visit_count))
+        _area_coverage_pct = float(_unique_visited / _total_cells * 100.0)
+        _did_explore = (_area_coverage_pct > 10.0 or self._survivors_found > 0)
+
         # Battery depleted
         if self._battery <= 0:
             self._battery = 0.0
@@ -370,8 +457,12 @@ class DisasterResponseEnv(gym.Env):
             )
             if not at_base:
                 reward += self.reward_cfg.w_stranded_penalty
-            else:
+            elif _did_explore:
+                # Only reward mission completion if the drone actually explored
                 reward += self.reward_cfg.w_mission_complete_bonus
+            else:
+                # Penalize sitting idle at base without exploring
+                reward -= 10.0
 
         # Time limit exceeded
         if self._time_step >= self.resource_cfg.max_mission_time:
@@ -380,8 +471,11 @@ class DisasterResponseEnv(gym.Env):
                 self._uav_pos[0] == self.grid_cfg.base_position[0]
                 and self._uav_pos[1] == self.grid_cfg.base_position[1]
             )
-            if at_base:
+            if at_base and _did_explore:
                 reward += self.reward_cfg.w_mission_complete_bonus * 0.5
+            elif at_base:
+                # Penalize sitting idle at base without exploring
+                reward -= 10.0
             else:
                 reward += self.reward_cfg.w_out_of_time_penalty
 
@@ -630,6 +724,19 @@ class DisasterResponseEnv(gym.Env):
             1.0,
         )
 
+        # Return safety metrics
+        base_y, base_x = self.grid_cfg.base_position
+        manhattan_dist = abs(self._uav_pos[0] - base_y) + abs(self._uav_pos[1] - base_x)
+        max_dist = max((h - 1) + (w - 1), 1)
+        dist_to_base_norm = np.clip(manhattan_dist / max_dist, 0.0, 1.0)
+
+        move_cost = self.resource_cfg.move_energy_cost
+        idle_cost = self.resource_cfg.hover_idle_energy
+        energy_needed_to_return = manhattan_dist * (move_cost + idle_cost)
+        energy_to_return_norm = np.clip(
+            energy_needed_to_return / max(self.resource_cfg.max_battery, _EPSILON), 0.0, 1.0
+        )
+
         # Context features
         if self.enable_context_features:
             ctx = self._compute_context_features()
@@ -644,6 +751,8 @@ class DisasterResponseEnv(gym.Env):
                 y_norm,
                 compute_norm,
                 comm_norm,
+                dist_to_base_norm,
+                energy_to_return_norm,
                 ctx[0],  # exploration
                 ctx[1],  # investigation
                 ctx[2],  # resource constrained

@@ -13,7 +13,7 @@ def test_env():
     assert "spatial_grid" in obs, "Missing spatial_grid key"
     assert "telemetry" in obs, "Missing telemetry key"
     assert obs["spatial_grid"].shape == (5, 20, 20), f"Bad spatial shape: {obs['spatial_grid'].shape}"
-    assert obs["telemetry"].shape == (11,), f"Bad telemetry shape: {obs['telemetry'].shape}"
+    assert obs["telemetry"].shape == (13,), f"Bad telemetry shape: {obs['telemetry'].shape}"
     assert env.observation_space.contains(obs), "Obs not in obs space"
     print("Reset OK. Spatial:", obs["spatial_grid"].shape, "Telemetry:", obs["telemetry"].shape)
 
