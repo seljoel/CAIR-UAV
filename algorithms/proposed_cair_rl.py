@@ -32,6 +32,7 @@ from stable_baselines3.common.vec_env import VecEnv
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import TRAINING, TrainingConfig
 from environment.disaster_env import DisasterResponseEnv
+from environment.safety_wrapper import BatterySafetyWrapper
 
 
 def build_cair_rl_env(
@@ -44,6 +45,7 @@ def build_cair_rl_env(
         - Information Gain Reward (enable_information_gain=True)
         - Mission Memory (enable_mission_memory=True)
         - Context Features (enable_context_features=True)
+        - Battery Safety Wrapper (action override for RTB)
 
     Args:
         seed: Random seed.
@@ -60,7 +62,7 @@ def build_cair_rl_env(
                 enable_mission_memory=True,
                 enable_context_features=True,
             )
-            return env
+            return BatterySafetyWrapper(env, safety_factor=1.60)
         return _init
 
     return make_vec_env(make_env(), n_envs=n_envs, seed=seed)

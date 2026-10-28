@@ -1,0 +1,31 @@
+{
+    "group_id": "group_a",
+    "name": "Group A (Standard PPO)",
+    "description": "Baseline PPO with no information gain reward, no revisit memory decay, and no context features.",
+    "features": {
+        "enable_information_gain": false,
+        "enable_mission_memory": false,
+        "enable_context_features": false
+    },
+    "ppo_hyperparameters": {
+        "learning_rate": 0.0003,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_range": 0.2,
+        "ent_coef": 0.01,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "net_arch_pi": [
+            256,
+            128
+        ],
+        "net_arch_vf": [
+            256,
+            128
+        ]
+    },
+    "reference_model": "standard_final.zip"
+}

@@ -262,6 +262,10 @@ class DisasterResponseEnv(gym.Env):
         self._episode_reward = 0.0
         self._done = False
         self._emergency_return_triggered = False
+        # Latched True the first time the UAV is at base with battery > 0.
+        # Used for mission_success: battery may drain to 0 while hovering at
+        # base, but the drone still completed a successful return.
+        self._returned_to_base = False
 
         # Mark initial position as visited
         self._visit_count[self._uav_pos[0], self._uav_pos[1]] = 1.0
@@ -415,23 +419,27 @@ class DisasterResponseEnv(gym.Env):
         idle_cost = self.resource_cfg.hover_idle_energy
         # Energy needed = (distance * move_cost) + (distance * idle_drain_per_step)
         energy_needed_to_return = current_dist_to_base * (move_cost + idle_cost)
-        max_batt = self.resource_cfg.max_battery
-        # 10% safety buffer
-        safe_energy_threshold = energy_needed_to_return + (max_batt * 0.10)
+        # 30% safety buffer, proportional to actual return cost (was flat 10%).
+        # This fires earlier and scales with how far the drone has wandered.
+        safe_energy_threshold = energy_needed_to_return * 1.30
 
         if not hasattr(self, "_prev_dist_to_base"):
             self._prev_dist_to_base = current_dist_to_base
 
         if current_dist_to_base > 0:
             if self._battery <= safe_energy_threshold:
-                # Battery is in the critical zone
+                # Battery is in the critical zone — make the signal strong
+                # enough to compete with the IG reward (~10 per scan step).
                 if action == Action.RETURN_TO_BASE:
-                    reward += 5.0  # Reward for choosing the safe action
+                    reward += 10.0  # Bonus for choosing the safe action (was 5)
                 else:
-                    reward -= 10.0  # Penalty for ignoring critical battery
+                    reward -= 20.0  # Penalty for ignoring critical battery (was 10)
 
-            # Emergency termination: return is physically impossible
-            if self._battery < energy_needed_to_return:
+            # Emergency termination: return is physically impossible.
+            # IMPORTANT: Do NOT terminate if the drone is already executing
+            # RETURN_TO_BASE — the wrapper guarantees it will reach base.
+            # Terminating mid-walk is the primary cause of mission_success=0.
+            if self._battery < energy_needed_to_return and action != Action.RETURN_TO_BASE:
                 terminated = True
                 self._battery = max(self._battery, 0.0)
                 reward += self.reward_cfg.w_stranded_penalty
@@ -487,6 +495,14 @@ class DisasterResponseEnv(gym.Env):
 
         self._done = terminated or truncated
         self._episode_reward += reward
+
+        # Latch: mark return success when UAV is at base with battery > 0.
+        at_base_now = (
+            self._uav_pos[0] == self.grid_cfg.base_position[0]
+            and self._uav_pos[1] == self.grid_cfg.base_position[1]
+        )
+        if at_base_now and self._battery > 0:
+            self._returned_to_base = True
 
         obs = self._build_observation()
         info = self._build_info()
@@ -1002,7 +1018,7 @@ class DisasterResponseEnv(gym.Env):
             "dynamic_events": self._dynamic_events_count,
             "episode_reward": float(self._episode_reward),
             "at_base": at_base,
-            "mission_success": at_base and self._battery > 0,
+            "mission_success": self._returned_to_base or (at_base and self._battery > 0),
         }
 
     # ==================================================================

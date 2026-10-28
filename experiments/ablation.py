@@ -33,20 +33,21 @@ def run_ablation_study():
     
     ablation_models = {
         "Group A (Standard RL)": os.path.join(MODELS_DIR, "standard", "standard_final.zip"),
-        "Group E (Full CAIR-RL)": os.path.join(MODELS_DIR, "cair", "cair_final.zip")
+        "Group B (IG Only)": os.path.join(MODELS_DIR, "ablation", "group_b_ig_only", "group_b_final.zip"),
+        "Group C (IG + Memory)": os.path.join(MODELS_DIR, "ablation", "group_c_ig_memory", "group_c_final.zip"),
+        "Group D/E (Full CAIR-RL)": os.path.join(MODELS_DIR, "cair", "cair_final.zip")
     }
-    
-    # Note: Groups B, C, D require you to train intermediate models.
-    # For this script, we'll plot what's available.
     
     policies = []
     
-    # Initialize full environment for evaluation
-    env = DisasterResponseEnv(
+    # Initialize full environment for evaluation wrapped with battery safety
+    from environment.safety_wrapper import BatterySafetyWrapper
+    base_env = DisasterResponseEnv(
         enable_information_gain=True,
         enable_mission_memory=True,
         enable_context_features=True
     )
+    env = BatterySafetyWrapper(base_env, safety_factor=1.60)
     
     for name, path in ablation_models.items():
         if os.path.exists(path):

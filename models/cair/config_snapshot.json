@@ -1,0 +1,31 @@
+{
+    "group_id": "group_e",
+    "name": "Group E (Existing Full CAIR-RL)",
+    "description": "Verified pre-trained reference checkpoint of Full CAIR-RL.",
+    "features": {
+        "enable_information_gain": true,
+        "enable_mission_memory": true,
+        "enable_context_features": true
+    },
+    "ppo_hyperparameters": {
+        "learning_rate": 0.0003,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_range": 0.2,
+        "ent_coef": 0.01,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "net_arch_pi": [
+            256,
+            128
+        ],
+        "net_arch_vf": [
+            256,
+            128
+        ]
+    },
+    "reference_model": "cair_final.zip"
+}

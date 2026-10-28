@@ -13,6 +13,7 @@ from stable_baselines3 import PPO
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import MODELS_DIR, Action
 from environment.disaster_env import DisasterResponseEnv
+from environment.safety_wrapper import BatterySafetyWrapper
 from algorithms.rule_based import RuleBasedPolicy
 from visualization.simulator import VisualSimulator
 
@@ -20,13 +21,14 @@ from visualization.simulator import VisualSimulator
 def run_demo():
     print("Initializing CAIR-UAV Visual Demo...")
     
-    # Create environment
-    env = DisasterResponseEnv(
+    # Create environment wrapped with battery safety
+    base_env = DisasterResponseEnv(
         seed=42,
         enable_information_gain=True,
         enable_mission_memory=True,
         enable_context_features=True
     )
+    env = BatterySafetyWrapper(base_env, safety_factor=1.60)
     
     # Check for trained model
     model_path = os.path.join(MODELS_DIR, "cair", "cair_final.zip")
@@ -82,7 +84,9 @@ def run_demo():
             sim.render(env, episode_reward, step, action_name)
             
         if sim.running:
-            print(f"Episode Finished! Reward: {episode_reward:.2f} | Found: {info['survivors_found']}/{info['total_survivors']}")
+            success = info.get('mission_success', False)
+            at_base = info.get('at_base', False)
+            print(f"Episode Finished! Reward: {episode_reward:.2f} | Found: {info['survivors_found']}/{info['total_survivors']} | Returned to Base: {at_base} (Success: {success})")
             print("Restarting in 2 seconds...")
             time.sleep(2)
             

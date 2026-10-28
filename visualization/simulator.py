@@ -84,13 +84,14 @@ class VisualSimulator:
 
         self.screen.fill((30, 30, 30))  # Dark background
 
-        # Get state arrays directly from the environment
-        uav_pos = env.uav_position
-        battery = env._battery
-        belief_map = env._belief_map
-        hazard_map = env._observed_hazard_map
-        visit_count = env._visit_count
-        found_survivors = env._found_survivor_cells
+        # Get state arrays directly from the environment (handling wrappers safely)
+        raw_env = getattr(env, "unwrapped", env)
+        uav_pos = raw_env.uav_position
+        battery = raw_env._battery
+        belief_map = raw_env._belief_map
+        hazard_map = raw_env._observed_hazard_map
+        visit_count = raw_env._visit_count
+        found_survivors = raw_env._found_survivor_cells
         base_pos = GRID.base_position
 
         # Draw grid
@@ -170,7 +171,7 @@ class VisualSimulator:
 
         # Stats
         stats1 = f"Step: {step} | Reward: {episode_reward:.1f} | Action: {action_name}"
-        stats2 = f"Found: {env._survivors_found}/{env._total_survivors} | IG: {env._total_ig:.1f}"
+        stats2 = f"Found: {raw_env._survivors_found}/{raw_env._total_survivors} | IG: {raw_env._total_ig:.1f}"
         
         s1_surf = self.font.render(stats1, True, (200, 200, 200))
         s2_surf = self.font.render(stats2, True, (200, 200, 200))

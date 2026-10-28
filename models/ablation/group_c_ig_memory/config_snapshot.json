@@ -1,0 +1,39 @@
+{
+    "group_id": "group_c",
+    "name": "Group C (IG + Memory)",
+    "description": "PPO with Information Gain reward and Revisit-Aware Memory decay, but no context features.",
+    "features": {
+        "enable_information_gain": true,
+        "enable_mission_memory": true,
+        "enable_context_features": false
+    },
+    "ppo_hyperparameters": {
+        "learning_rate": 0.0003,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "n_epochs": 10,
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_range": 0.2,
+        "ent_coef": 0.01,
+        "vf_coef": 0.5,
+        "max_grad_norm": 0.5,
+        "net_arch_pi": [
+            256,
+            128
+        ],
+        "net_arch_vf": [
+            256,
+            128
+        ]
+    },
+    "training_run": {
+        "total_timesteps": 1000000,
+        "seed": 42,
+        "n_envs": 4,
+        "duration_seconds": 2867.11,
+        "fps": 348.78,
+        "final_model_path": "D:\\CSE\\S7\\Research Project\\CAIR-UAV\\models/ablation/group_c_ig_memory\\group_c_final.zip",
+        "timestamp": "2026-10-28 16:24:01"
+    }
+}
